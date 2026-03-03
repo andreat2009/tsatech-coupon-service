@@ -1,11 +1,6 @@
-FROM maven:3.9-eclipse-temurin-17 AS build
+FROM image-registry.openshift-image-registry.svc:5000/openshift/java-runtime:openjdk-17-ubi8
 WORKDIR /app
-COPY pom.xml ./
-COPY src ./src
-RUN mvn -q -DskipTests package
-
-FROM eclipse-temurin:17-jre
-WORKDIR /app
-COPY --from=build /app/target/coupon-service-0.1.0.jar /app/app.jar
+ARG JAR_FILE=target/*.jar
+COPY ${JAR_FILE} /app/app.jar
 EXPOSE 8094
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
