@@ -168,7 +168,9 @@ spec:
                       ROUTE_HOST=$(oc -n "$OPENSHIFT_PROJECT" get route "${APP_NAME}" -o jsonpath='{.spec.host}' || true)
                       if [ -n "$ROUTE_HOST" ] && command -v curl >/dev/null 2>&1; then
                         smoke_ok=0
-                        for attempt in $(seq 1 15); do
+                        SMOKE_ATTEMPTS="${SMOKE_RETRY_ATTEMPTS:-15}"
+                        SMOKE_SLEEP_SECONDS="${SMOKE_RETRY_SLEEP_SECONDS:-4}"
+                        for attempt in $(seq 1 "$SMOKE_ATTEMPTS"); do
                           if curl -k -fsS --http1.1 --connect-timeout 5 --max-time 12 "https://${ROUTE_HOST}/actuator/health" >/dev/null; then
                             smoke_ok=1
                             break
@@ -177,8 +179,8 @@ spec:
                             smoke_ok=1
                             break
                           fi
-                          echo "Smoke check attempt ${attempt}/15 failed for ${ROUTE_HOST}; retrying..."
-                          sleep 4
+                          echo "Smoke check attempt ${attempt}/${SMOKE_ATTEMPTS} failed for ${ROUTE_HOST}; retrying..."
+                          sleep "$SMOKE_SLEEP_SECONDS"
                         done
                         if [ "$smoke_ok" -ne 1 ]; then
                           echo "Smoke check failed for ${ROUTE_HOST} after retries"
