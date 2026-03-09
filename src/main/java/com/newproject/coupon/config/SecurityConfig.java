@@ -25,7 +25,7 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/info").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/pricing/quote").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/pricing/quote").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/pricing/coupons/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/pricing/coupons/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/pricing/coupons/**").hasRole("ADMIN")
