@@ -38,6 +38,14 @@ spring:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:https://keycloak-platform.apps-crc.testing/realms/master}
 
 coupon:
+  translation:
+    enabled: ${COUPON_TRANSLATION_ENABLED:true}
+    provider: ${COUPON_TRANSLATION_PROVIDER:openai}
+    model: ${OPENAI_MODEL:gpt-4o-mini}
+    timeout-ms: ${COUPON_TRANSLATION_TIMEOUT_MS:20000}
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
   events:
     enabled: ${COUPON_EVENTS_ENABLED:true}
     topic: ${COUPON_EVENTS_TOPIC:coupon.events}

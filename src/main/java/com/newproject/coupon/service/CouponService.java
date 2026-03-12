@@ -2,6 +2,8 @@ package com.newproject.coupon.service;
 
 import com.newproject.coupon.domain.Coupon;
 import com.newproject.coupon.domain.CouponTranslation;
+import com.newproject.coupon.dto.CouponAutoTranslateRequest;
+import com.newproject.coupon.dto.CouponAutoTranslateResponse;
 import com.newproject.coupon.dto.CouponRequest;
 import com.newproject.coupon.dto.CouponResponse;
 import com.newproject.coupon.dto.LocalizedContent;
@@ -11,13 +13,17 @@ import com.newproject.coupon.events.EventPublisher;
 import com.newproject.coupon.exception.BadRequestException;
 import com.newproject.coupon.exception.NotFoundException;
 import com.newproject.coupon.repository.CouponRepository;
+import com.newproject.coupon.service.translation.TranslationResult;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,10 +32,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class CouponService {
     private final CouponRepository couponRepository;
     private final EventPublisher eventPublisher;
+    private final CouponTranslationService couponTranslationService;
 
-    public CouponService(CouponRepository couponRepository, EventPublisher eventPublisher) {
+    public CouponService(
+        CouponRepository couponRepository,
+        EventPublisher eventPublisher,
+        CouponTranslationService couponTranslationService
+    ) {
         this.couponRepository = couponRepository;
         this.eventPublisher = eventPublisher;
+        this.couponTranslationService = couponTranslationService;
     }
 
     @Transactional(readOnly = true)
@@ -97,6 +109,78 @@ public class CouponService {
 
         couponRepository.delete(coupon);
         eventPublisher.publish("COUPON_DELETED", "coupon", id.toString(), null);
+    }
+
+    @Transactional(readOnly = true)
+    public CouponAutoTranslateResponse autoTranslate(CouponAutoTranslateRequest request) {
+        Map<String, LocalizedContent> normalized = normalizeTranslationPayload(
+            request != null ? request.getTranslations() : null
+        );
+
+        String sourceLanguage = LanguageSupport.normalizeLanguage(request != null ? request.getSourceLanguage() : null);
+        if (sourceLanguage == null) {
+            sourceLanguage = LanguageSupport.DEFAULT_LANGUAGE;
+        }
+
+        LocalizedContent sourceContent = normalized.get(sourceLanguage);
+        if (sourceContent == null) {
+            sourceContent = new LocalizedContent();
+            normalized.put(sourceLanguage, sourceContent);
+        }
+
+        if (trimToNull(sourceContent.getName()) == null) {
+            throw new BadRequestException("Source language coupon name is required");
+        }
+
+        boolean overwrite = request != null && Boolean.TRUE.equals(request.getOverwriteExisting());
+        Set<String> targets = new LinkedHashSet<>();
+        for (String language : LanguageSupport.SUPPORTED_LANGUAGES) {
+            if (language.equals(sourceLanguage)) {
+                continue;
+            }
+
+            LocalizedContent current = normalized.get(language);
+            if (overwrite || isBlank(current != null ? current.getName() : null)) {
+                targets.add(language);
+            }
+        }
+
+        TranslationResult translationResult = couponTranslationService.translateCouponContent(sourceLanguage, sourceContent, targets);
+        Set<String> translatedLanguages = new LinkedHashSet<>();
+
+        if (translationResult.getTranslations() != null) {
+            for (Map.Entry<String, LocalizedContent> entry : translationResult.getTranslations().entrySet()) {
+                String language = LanguageSupport.normalizeLanguage(entry.getKey());
+                if (language == null || language.equals(sourceLanguage)) {
+                    continue;
+                }
+
+                LocalizedContent translated = entry.getValue();
+                if (translated == null) {
+                    continue;
+                }
+
+                LocalizedContent current = normalized.get(language);
+                if (current == null) {
+                    current = new LocalizedContent();
+                    normalized.put(language, current);
+                }
+
+                String translatedName = trimToNull(translated.getName());
+                if (translatedName != null && (overwrite || isBlank(current.getName()))) {
+                    current.setName(translatedName);
+                    translatedLanguages.add(language);
+                }
+            }
+        }
+
+        CouponAutoTranslateResponse response = new CouponAutoTranslateResponse();
+        response.setTranslations(normalized);
+        response.setTranslatedLanguages(new ArrayList<>(translatedLanguages));
+        response.setWarnings(translationResult.getWarnings() != null
+            ? new ArrayList<>(translationResult.getWarnings())
+            : new ArrayList<>());
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -316,6 +400,17 @@ public class CouponService {
         return normalized;
     }
 
+    private Map<String, LocalizedContent> normalizeTranslationPayload(Map<String, LocalizedContent> requested) {
+        Map<String, LocalizedContent> normalized = new LinkedHashMap<>();
+        for (String language : LanguageSupport.SUPPORTED_LANGUAGES) {
+            LocalizedContent source = requested != null ? requested.get(language) : null;
+            LocalizedContent content = new LocalizedContent();
+            content.setName(trimToNull(source != null ? source.getName() : null));
+            normalized.put(language, content);
+        }
+        return normalized;
+    }
+
     private String extractName(Map<String, LocalizedContent> requested, String language) {
         if (requested == null) {
             return null;
@@ -386,5 +481,9 @@ public class CouponService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private boolean isBlank(String value) {
+        return trimToNull(value) == null;
     }
 }

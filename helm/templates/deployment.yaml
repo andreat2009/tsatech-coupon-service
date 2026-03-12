@@ -50,6 +50,27 @@ spec:
                   name: {{ include "app.secretName" $ }}
                   key: DB_PASSWORD
 
+{{- if .Values.translationSecret.enabled }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.translationSecret.name }}
+                  key: {{ .Values.translationSecret.apiKeyKey }}
+                  optional: true
+            - name: OPENAI_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.translationSecret.name }}
+                  key: {{ .Values.translationSecret.modelKey }}
+                  optional: true
+            - name: OPENAI_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.translationSecret.name }}
+                  key: {{ .Values.translationSecret.baseUrlKey }}
+                  optional: true
+{{- end }}
+
 {{- if not (hasKey .Values.env "SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE") }}
             - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
               value: "2"

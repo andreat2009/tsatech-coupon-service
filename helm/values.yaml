@@ -37,6 +37,13 @@ secret:
 secretEnv:
   {}
 
+translationSecret:
+  enabled: true
+  name: "tsatech-catalog-translation-dev"
+  apiKeyKey: "OPENAI_API_KEY"
+  modelKey: "OPENAI_MODEL"
+  baseUrlKey: "OPENAI_BASE_URL"
+
 tls:
   enabled: true
   secretName: "wildcard-apps-tls"

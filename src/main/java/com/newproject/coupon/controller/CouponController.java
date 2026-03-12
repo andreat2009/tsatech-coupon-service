@@ -1,5 +1,7 @@
 package com.newproject.coupon.controller;
 
+import com.newproject.coupon.dto.CouponAutoTranslateRequest;
+import com.newproject.coupon.dto.CouponAutoTranslateResponse;
 import com.newproject.coupon.dto.CouponRequest;
 import com.newproject.coupon.dto.CouponResponse;
 import com.newproject.coupon.dto.PriceQuoteRequest;
@@ -55,6 +57,11 @@ public class CouponController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteCoupon(@PathVariable Long id) {
         couponService.delete(id);
+    }
+
+    @PostMapping("/coupons/translate")
+    public CouponAutoTranslateResponse autoTranslateCoupon(@RequestBody CouponAutoTranslateRequest request) {
+        return couponService.autoTranslate(request);
     }
 
     @PostMapping("/quote")
