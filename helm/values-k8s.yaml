@@ -1,0 +1,61 @@
+image:
+  repository: ghcr.io/andreat2009/tsatech-coupon-service
+  tag: latest
+  digest: ""
+  pullPolicy: Always
+
+route:
+  enabled: false
+  host: ""
+  tls:
+    termination: passthrough
+    insecureEdgeTerminationPolicy: Redirect
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: nginx
+  host: coupon-service-ecommerce.apps.local
+  path: /
+  pathType: Prefix
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  tls:
+    enabled: true
+    secretName: wildcard-apps-tls
+
+env:
+  SERVER_PORT: "8443"
+  SERVER_SSL_ENABLED: "false"
+  KEYCLOAK_ISSUER_URI: "http://keycloak.platform.svc.cluster.local/realms/master"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka.platform.svc.cluster.local:9092"
+  KAFKA_SECURITY_PROTOCOL: "PLAINTEXT"
+
+secret:
+  name: coupon-service-secret
+  create: false
+  data: {}
+
+secretEnv: {}
+
+tls:
+  enabled: false
+  secretName: wildcard-apps-tls
+
+truststore:
+  enabled: false
+  secretName: platform-truststore
+  mountPath: /etc/ssl/openshift
+  password: changeit
+
+readinessProbe:
+  scheme: HTTP
+  path: /actuator/health
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+livenessProbe:
+  scheme: HTTP
+  path: /actuator/health
+  initialDelaySeconds: 20
+  periodSeconds: 20
