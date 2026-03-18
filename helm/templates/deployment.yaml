@@ -109,14 +109,14 @@ spec:
             httpGet:
               path: {{ .Values.readinessProbe.path }}
               port: {{ .Values.service.port }}
-              scheme: HTTPS
+              scheme: {{ default "HTTPS" .Values.readinessProbe.scheme }}
             initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
           livenessProbe:
             httpGet:
               path: {{ .Values.livenessProbe.path }}
               port: {{ .Values.service.port }}
-              scheme: HTTPS
+              scheme: {{ default "HTTPS" .Values.livenessProbe.scheme }}
             initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
           resources:
