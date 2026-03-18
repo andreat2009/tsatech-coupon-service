@@ -19,13 +19,9 @@ spec:
     image: maven:3.9.9-eclipse-temurin-17
     command: ['cat']
     tty: true
-  - name: kubectl
-    image: registry.k8s.io/kubectl:v1.32.2
-    command: ['cat']
-    tty: true
-  - name: helm
-    image: alpine/helm:3.17.1
-    command: ['cat']
+  - name: tools
+    image: alpine:3.22
+    command: ['sh', '-c', 'cat']
     tty: true
   - name: kaniko
     image: gcr.io/kaniko-project/executor:v1.23.2-debug
@@ -83,11 +79,25 @@ set -eu
         }
         stage('Helm Deploy') {
             steps {
-                container('helm') {
+                container('tools') {
                     sh '''#!/bin/sh
 set -eu
-helm lint "${CHART_PATH}" -f "${CHART_PATH}/values-k8s.yaml"
-helm upgrade --install "${HELM_RELEASE}" "${CHART_PATH}" \
+apk add --no-cache curl tar gzip ca-certificates >/dev/null
+TOOLS_DIR="$WORKSPACE/.tools"
+mkdir -p "$TOOLS_DIR"
+if [ ! -x "$TOOLS_DIR/kubectl" ]; then
+  curl -fsSL -o "$TOOLS_DIR/kubectl" "https://dl.k8s.io/release/v1.32.2/bin/linux/amd64/kubectl"
+  chmod +x "$TOOLS_DIR/kubectl"
+fi
+if [ ! -x "$TOOLS_DIR/helm" ]; then
+  rm -rf "$TOOLS_DIR/linux-amd64"
+  curl -fsSL -o "$TOOLS_DIR/helm.tgz" "https://get.helm.sh/helm-v3.17.1-linux-amd64.tar.gz"
+  tar -xzf "$TOOLS_DIR/helm.tgz" -C "$TOOLS_DIR"
+  mv "$TOOLS_DIR/linux-amd64/helm" "$TOOLS_DIR/helm"
+  chmod +x "$TOOLS_DIR/helm"
+fi
+"$TOOLS_DIR/helm" lint "${CHART_PATH}" -f "${CHART_PATH}/values-k8s.yaml"
+"$TOOLS_DIR/helm" upgrade --install "${HELM_RELEASE}" "${CHART_PATH}" \
   -n "${K8S_NAMESPACE}" \
   --create-namespace \
   -f "${CHART_PATH}/values-k8s.yaml" \
@@ -102,8 +112,18 @@ helm upgrade --install "${HELM_RELEASE}" "${CHART_PATH}" \
         }
         stage('Rollout') {
             steps {
-                container('kubectl') {
-                    sh 'kubectl -n "${K8S_NAMESPACE}" rollout status deployment/${APP_NAME} --timeout=15m'
+                container('tools') {
+                    sh '''#!/bin/sh
+set -eu
+apk add --no-cache curl >/dev/null
+TOOLS_DIR="$WORKSPACE/.tools"
+mkdir -p "$TOOLS_DIR"
+if [ ! -x "$TOOLS_DIR/kubectl" ]; then
+  curl -fsSL -o "$TOOLS_DIR/kubectl" "https://dl.k8s.io/release/v1.32.2/bin/linux/amd64/kubectl"
+  chmod +x "$TOOLS_DIR/kubectl"
+fi
+"$TOOLS_DIR/kubectl" -n "${K8S_NAMESPACE}" rollout status deployment/${APP_NAME} --timeout=15m
+'''
                 }
             }
         }
