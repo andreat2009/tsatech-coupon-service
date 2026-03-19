@@ -36,6 +36,7 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:https://keycloak-platform.apps-crc.testing/realms/master}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:https://keycloak-platform.apps-crc.testing/realms/master/protocol/openid-connect/certs}
 
 coupon:
   translation:

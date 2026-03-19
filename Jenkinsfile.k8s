@@ -104,7 +104,8 @@ fi
   --set-string image.tag="${IMAGE_TAG}" \
   --set-string image.pullPolicy="${IMAGE_PULL_POLICY}" \
   --set-string ingress.host="${APP_NAME}-${K8S_NAMESPACE}.${DOMAIN}" \
-  --set-string env.KEYCLOAK_ISSUER_URI="http://keycloak.${PLATFORM_NAMESPACE}.svc.cluster.local/realms/master"
+  --set-string env.KEYCLOAK_ISSUER_URI="https://keycloak-${PLATFORM_NAMESPACE}.${DOMAIN}/realms/master" \
+  --set-string env.KEYCLOAK_JWK_SET_URI="http://keycloak.${PLATFORM_NAMESPACE}.svc.cluster.local/realms/master/protocol/openid-connect/certs"
 '''
                 }
             }

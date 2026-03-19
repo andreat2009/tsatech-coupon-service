@@ -27,7 +27,8 @@ ingress:
 env:
   SERVER_PORT: "8443"
   SERVER_SSL_ENABLED: "false"
-  KEYCLOAK_ISSUER_URI: "http://keycloak.platform.svc.cluster.local/realms/master"
+  KEYCLOAK_ISSUER_URI: "https://keycloak-platform.apps.local/realms/master"
+  KEYCLOAK_JWK_SET_URI: "http://keycloak.platform.svc.cluster.local/realms/master/protocol/openid-connect/certs"
   KAFKA_BOOTSTRAP_SERVERS: "kafka.platform.svc.cluster.local:9092"
   KAFKA_SECURITY_PROTOCOL: "PLAINTEXT"
 
