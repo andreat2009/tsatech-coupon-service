@@ -85,17 +85,26 @@ set -eu
 apk add --no-cache curl tar gzip ca-certificates >/dev/null
 TOOLS_DIR="$WORKSPACE/.tools"
 mkdir -p "$TOOLS_DIR"
-if [ ! -x "$TOOLS_DIR/kubectl" ]; then
-  curl -fsSL -o "$TOOLS_DIR/kubectl" "https://dl.k8s.io/release/v1.32.2/bin/linux/amd64/kubectl"
+ARCH="$(uname -m)"
+case "$ARCH" in
+  x86_64|amd64) K8S_ARCH=amd64 ;;
+  aarch64|arm64) K8S_ARCH=arm64 ;;
+  *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
+esac
+if [ ! -x "$TOOLS_DIR/kubectl" ] || [ ! -f "$TOOLS_DIR/.arch" ] || [ "$(cat "$TOOLS_DIR/.arch" 2>/dev/null)" != "$K8S_ARCH" ]; then
+  rm -f "$TOOLS_DIR/kubectl"
+  curl -fsSL -o "$TOOLS_DIR/kubectl" "https://dl.k8s.io/release/v1.32.2/bin/linux/${K8S_ARCH}/kubectl"
   chmod +x "$TOOLS_DIR/kubectl"
 fi
-if [ ! -x "$TOOLS_DIR/helm" ]; then
-  rm -rf "$TOOLS_DIR/linux-amd64"
-  curl -fsSL -o "$TOOLS_DIR/helm.tgz" "https://get.helm.sh/helm-v3.17.1-linux-amd64.tar.gz"
+if [ ! -x "$TOOLS_DIR/helm" ] || [ ! -f "$TOOLS_DIR/.arch" ] || [ "$(cat "$TOOLS_DIR/.arch" 2>/dev/null)" != "$K8S_ARCH" ]; then
+  rm -f "$TOOLS_DIR/helm" "$TOOLS_DIR/helm.tgz"
+  rm -rf "$TOOLS_DIR/linux-amd64" "$TOOLS_DIR/linux-arm64"
+  curl -fsSL -o "$TOOLS_DIR/helm.tgz" "https://get.helm.sh/helm-v3.17.1-linux-${K8S_ARCH}.tar.gz"
   tar -xzf "$TOOLS_DIR/helm.tgz" -C "$TOOLS_DIR"
-  mv "$TOOLS_DIR/linux-amd64/helm" "$TOOLS_DIR/helm"
+  mv "$TOOLS_DIR/linux-${K8S_ARCH}/helm" "$TOOLS_DIR/helm"
   chmod +x "$TOOLS_DIR/helm"
 fi
+printf '%s' "$K8S_ARCH" > "$TOOLS_DIR/.arch"
 "$TOOLS_DIR/helm" lint "${CHART_PATH}" -f "${CHART_PATH}/values-k8s.yaml"
 "$TOOLS_DIR/helm" upgrade --install "${HELM_RELEASE}" "${CHART_PATH}" \
   -n "${K8S_NAMESPACE}" \
@@ -118,10 +127,18 @@ set -eu
 apk add --no-cache curl >/dev/null
 TOOLS_DIR="$WORKSPACE/.tools"
 mkdir -p "$TOOLS_DIR"
-if [ ! -x "$TOOLS_DIR/kubectl" ]; then
-  curl -fsSL -o "$TOOLS_DIR/kubectl" "https://dl.k8s.io/release/v1.32.2/bin/linux/amd64/kubectl"
+ARCH="$(uname -m)"
+case "$ARCH" in
+  x86_64|amd64) K8S_ARCH=amd64 ;;
+  aarch64|arm64) K8S_ARCH=arm64 ;;
+  *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
+esac
+if [ ! -x "$TOOLS_DIR/kubectl" ] || [ ! -f "$TOOLS_DIR/.arch" ] || [ "$(cat "$TOOLS_DIR/.arch" 2>/dev/null)" != "$K8S_ARCH" ]; then
+  rm -f "$TOOLS_DIR/kubectl"
+  curl -fsSL -o "$TOOLS_DIR/kubectl" "https://dl.k8s.io/release/v1.32.2/bin/linux/${K8S_ARCH}/kubectl"
   chmod +x "$TOOLS_DIR/kubectl"
 fi
+printf '%s' "$K8S_ARCH" > "$TOOLS_DIR/.arch"
 "$TOOLS_DIR/kubectl" -n "${K8S_NAMESPACE}" rollout status deployment/${APP_NAME} --timeout=15m
 '''
                 }
