@@ -6,5 +6,5 @@ metadata:
     app: {{ include "app.name" . }}
 data:
 {{- range $key, $value := .Values.env }}
-  {{ $key }}: {{ $value | quote }}
+  {{ $key }}: {{ tpl (toString $value) $ | quote }}
 {{- end }}

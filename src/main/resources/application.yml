@@ -20,7 +20,7 @@ spring:
     enabled: true
     locations: classpath:db/migration
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka.platform.svc.cluster.local:9092}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka.${PLATFORM_NAMESPACE:platform}.svc.cluster.local:9092}
     properties:
       security.protocol: ${KAFKA_SECURITY_PROTOCOL:SASL_SSL}
       sasl.mechanism: ${KAFKA_SASL_MECHANISM:SCRAM-SHA-512}
@@ -35,8 +35,8 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${KEYCLOAK_ISSUER_URI:https://keycloak-platform.apps-crc.testing/realms/master}
-          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:https://keycloak-platform.apps-crc.testing/realms/master/protocol/openid-connect/certs}
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:https://keycloak-platform.${APP_BASE_DOMAIN:apps.example.invalid}/realms/master}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://keycloak.${PLATFORM_NAMESPACE:platform}.svc.cluster.local/realms/master/protocol/openid-connect/certs}
 
 coupon:
   translation:

@@ -39,7 +39,7 @@ spec:
         IMAGE_REPOSITORY = "${params.IMAGE_REPOSITORY ?: 'ghcr.io/andreat2009/tsatech-coupon-service'}"
         IMAGE_TAG = "${params.IMAGE_TAG ?: 'latest'}"
         IMAGE_PULL_POLICY = "${params.IMAGE_PULL_POLICY ?: 'Always'}"
-        DOMAIN = "${params.DOMAIN ?: 'apps.local'}"
+        DOMAIN = "${params.DOMAIN ?: ''}"
         REGISTRY_CREDENTIALS_ID = "${params.REGISTRY_CREDENTIALS_ID ?: ''}"
     }
     stages {
@@ -106,6 +106,7 @@ if [ ! -x "$TOOLS_DIR/helm" ] || [ ! -f "$TOOLS_DIR/.arch" ] || [ "$(cat "$TOOLS
 fi
 printf '%s' "$K8S_ARCH" > "$TOOLS_DIR/.arch"
 IMAGE_DIGEST=""
+[ -n "${DOMAIN}" ] || { echo "DOMAIN parameter is required" >&2; exit 1; }
 if [ -f "$WORKSPACE/.image-digest" ]; then
   IMAGE_DIGEST="$(tr -d '\r\n' < "$WORKSPACE/.image-digest")"
 fi
@@ -113,6 +114,9 @@ fi
 "$TOOLS_DIR/helm" upgrade --install "${HELM_RELEASE}" "${CHART_PATH}" \
   -n "${K8S_NAMESPACE}" \
   -f "${CHART_PATH}/values-k8s.yaml" \
+  --set-string global.domain="${DOMAIN}" \
+  --set-string global.platformNamespace="${PLATFORM_NAMESPACE}" \
+  --set-string global.appNamespace="${K8S_NAMESPACE}" \
   --set-string image.repository="${IMAGE_REPOSITORY}" \
   --set-string image.tag="${IMAGE_TAG}" \
   --set-string image.digest="${IMAGE_DIGEST}" \

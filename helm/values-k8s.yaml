@@ -4,6 +4,11 @@ image:
   digest: ""
   pullPolicy: Always
 
+global:
+  domain: "apps.example.invalid"
+  platformNamespace: "platform"
+  appNamespace: "ecommerce"
+
 route:
   enabled: false
   host: ""
@@ -15,7 +20,7 @@ route:
 ingress:
   enabled: true
   className: nginx
-  host: coupon-service-ecommerce.apps.local
+  host: '{{ printf "%s-%s.%s" .Release.Name .Release.Namespace .Values.global.domain }}'
   path: /
   pathType: Prefix
   annotations:
@@ -27,9 +32,9 @@ ingress:
 env:
   SERVER_PORT: "8443"
   SERVER_SSL_ENABLED: "false"
-  KEYCLOAK_ISSUER_URI: "https://keycloak-platform.apps.local/realms/master"
-  KEYCLOAK_JWK_SET_URI: "http://keycloak.platform.svc.cluster.local/realms/master/protocol/openid-connect/certs"
-  KAFKA_BOOTSTRAP_SERVERS: "kafka.platform.svc.cluster.local:9092"
+  KEYCLOAK_ISSUER_URI: '{{ printf "https://keycloak-%s.%s/realms/master" .Values.global.platformNamespace .Values.global.domain }}'
+  KEYCLOAK_JWK_SET_URI: '{{ printf "http://keycloak.%s.svc.cluster.local/realms/master/protocol/openid-connect/certs" .Values.global.platformNamespace }}'
+  KAFKA_BOOTSTRAP_SERVERS: '{{ printf "kafka.%s.svc.cluster.local:9092" .Values.global.platformNamespace }}'
   KAFKA_SECURITY_PROTOCOL: "PLAINTEXT"
 
 secret:
