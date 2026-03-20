@@ -71,7 +71,7 @@ JSON
                         }
                         sh '''#!/bin/sh
 set -eu
-/kaniko/executor --context "$PWD" --dockerfile Dockerfile.k8s --destination "${IMAGE_REPOSITORY}:${IMAGE_TAG}" --snapshot-mode=redo --use-new-run
+/kaniko/executor --context "$PWD" --dockerfile Dockerfile.k8s --destination "${IMAGE_REPOSITORY}:${IMAGE_TAG}" --snapshot-mode=redo --use-new-run --digest-file "$WORKSPACE/.image-digest"
 '''
                     }
                 }
@@ -105,12 +105,17 @@ if [ ! -x "$TOOLS_DIR/helm" ] || [ ! -f "$TOOLS_DIR/.arch" ] || [ "$(cat "$TOOLS
   chmod +x "$TOOLS_DIR/helm"
 fi
 printf '%s' "$K8S_ARCH" > "$TOOLS_DIR/.arch"
+IMAGE_DIGEST=""
+if [ -f "$WORKSPACE/.image-digest" ]; then
+  IMAGE_DIGEST="$(tr -d '\r\n' < "$WORKSPACE/.image-digest")"
+fi
 "$TOOLS_DIR/helm" lint "${CHART_PATH}" -f "${CHART_PATH}/values-k8s.yaml"
 "$TOOLS_DIR/helm" upgrade --install "${HELM_RELEASE}" "${CHART_PATH}" \
   -n "${K8S_NAMESPACE}" \
   -f "${CHART_PATH}/values-k8s.yaml" \
   --set-string image.repository="${IMAGE_REPOSITORY}" \
   --set-string image.tag="${IMAGE_TAG}" \
+  --set-string image.digest="${IMAGE_DIGEST}" \
   --set-string image.pullPolicy="${IMAGE_PULL_POLICY}" \
   --set-string ingress.host="${APP_NAME}-${K8S_NAMESPACE}.${DOMAIN}" \
   --set-string env.KEYCLOAK_ISSUER_URI="https://keycloak-${PLATFORM_NAMESPACE}.${DOMAIN}/realms/master" \
