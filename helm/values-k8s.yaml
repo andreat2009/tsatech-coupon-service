@@ -18,7 +18,7 @@ route:
   annotations: {}
 
 ingress:
-  enabled: true
+  enabled: false
   className: nginx
   host: '{{ printf "%s-%s.%s" .Release.Name .Release.Namespace .Values.global.domain }}'
   path: /
@@ -28,6 +28,12 @@ ingress:
   tls:
     enabled: true
     secretName: wildcard-apps-tls
+
+networkPolicy:
+  enabled: true
+  allowSameNamespace: true
+  allowIngressController: false
+  ingressControllerNamespace: ingress-nginx
 
 env:
   SERVER_PORT: "8443"

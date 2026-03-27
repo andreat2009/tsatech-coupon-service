@@ -1,0 +1,27 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "app.fullname" . }}
+  labels:
+    app: {{ include "app.name" . }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ include "app.name" . }}
+  policyTypes:
+    - Ingress
+{{- if or .Values.networkPolicy.allowSameNamespace .Values.networkPolicy.allowIngressController }}
+  ingress:
+{{- if .Values.networkPolicy.allowSameNamespace }}
+    - from:
+        - podSelector: {}
+{{- end }}
+{{- if .Values.networkPolicy.allowIngressController }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressControllerNamespace | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
