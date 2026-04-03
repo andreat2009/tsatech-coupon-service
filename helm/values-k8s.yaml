@@ -69,5 +69,5 @@ readinessProbe:
 livenessProbe:
   scheme: HTTP
   path: /actuator/health
-  initialDelaySeconds: 20
+  initialDelaySeconds: 120
   periodSeconds: 20
