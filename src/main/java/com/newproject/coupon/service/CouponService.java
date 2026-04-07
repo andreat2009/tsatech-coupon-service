@@ -2,6 +2,7 @@ package com.newproject.coupon.service;
 
 import com.newproject.coupon.domain.Coupon;
 import com.newproject.coupon.domain.CouponTranslation;
+import com.newproject.coupon.dto.AppliedOfferResponse;
 import com.newproject.coupon.dto.CouponAutoTranslateRequest;
 import com.newproject.coupon.dto.CouponAutoTranslateResponse;
 import com.newproject.coupon.dto.CouponRequest;
@@ -18,6 +19,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -30,6 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class CouponService {
+    private static final String DEFAULT_SCOPE = "ORDER";
+
     private final CouponRepository couponRepository;
     private final EventPublisher eventPublisher;
     private final CouponTranslationService couponTranslationService;
@@ -53,6 +57,7 @@ public class CouponService {
 
         String finalResolvedLanguage = resolvedLanguage;
         return couponRepository.findAll().stream()
+            .sorted(Comparator.comparing(Coupon::getPriority, Comparator.nullsLast(Integer::compareTo)).reversed())
             .map(coupon -> toResponse(coupon, finalResolvedLanguage))
             .collect(Collectors.toList());
     }
@@ -192,42 +197,96 @@ public class CouponService {
 
         BigDecimal subtotal = notNull(request.getSubtotal());
         BigDecimal shipping = notNull(request.getShipping());
+        String customerGroupCode = normalizeCustomerGroupCode(request.getCustomerGroupCode());
 
         PriceQuoteResponse response = new PriceQuoteResponse();
         response.setSubtotal(subtotal);
         response.setShipping(shipping);
+        response.setCouponDiscount(BigDecimal.ZERO);
+        response.setAutomaticDiscount(BigDecimal.ZERO);
+        response.setShippingDiscount(BigDecimal.ZERO);
 
-        BigDecimal discount = BigDecimal.ZERO;
-        String couponCode = request.getCouponCode();
+        List<AppliedOfferResponse> appliedOffers = new ArrayList<>();
+        BigDecimal orderDiscount = BigDecimal.ZERO;
+        BigDecimal shippingDiscount = BigDecimal.ZERO;
         String message = null;
 
-        if (couponCode != null && !couponCode.isBlank()) {
-            Coupon coupon = couponRepository.findByCodeIgnoreCase(couponCode.trim())
-                .orElse(null);
-
-            if (coupon == null) {
+        Coupon explicitCoupon = null;
+        String couponCode = trimToNull(request.getCouponCode());
+        if (couponCode != null) {
+            explicitCoupon = couponRepository.findByCodeIgnoreCase(couponCode).orElse(null);
+            if (explicitCoupon == null) {
                 message = localizedMessage("coupon.invalid", resolvedLanguage);
-            } else if (!isCouponUsable(coupon, subtotal)) {
+            } else if (!isCouponUsable(explicitCoupon, subtotal, customerGroupCode)) {
                 message = localizedMessage("coupon.not_applicable", resolvedLanguage);
+                explicitCoupon = null;
             } else {
-                discount = calculateDiscount(coupon, subtotal);
-                response.setAppliedCoupon(coupon.getCode());
+                BigDecimal explicitDiscount = calculateDiscount(explicitCoupon, subtotal.subtract(orderDiscount), shipping.subtract(shippingDiscount));
+                if (isShippingScope(explicitCoupon)) {
+                    shippingDiscount = shippingDiscount.add(explicitDiscount);
+                } else {
+                    orderDiscount = orderDiscount.add(explicitDiscount);
+                    response.setCouponDiscount(explicitDiscount);
+                }
+                response.setAppliedCoupon(explicitCoupon.getCode());
+                appliedOffers.add(toAppliedOffer(explicitCoupon, explicitDiscount, false));
                 message = localizedMessage("coupon.applied", resolvedLanguage);
             }
         }
 
-        BigDecimal total = subtotal.add(shipping).subtract(discount);
+        final Coupon finalExplicitCoupon = explicitCoupon;
+        boolean allowAutomaticOffers = finalExplicitCoupon == null || Boolean.TRUE.equals(finalExplicitCoupon.getStackable());
+        if (allowAutomaticOffers) {
+            boolean chainStackable = finalExplicitCoupon == null || Boolean.TRUE.equals(finalExplicitCoupon.getStackable());
+            for (Coupon autoOffer : couponRepository.findAll().stream()
+                .filter(coupon -> Boolean.TRUE.equals(coupon.getAutoApply()))
+                .filter(coupon -> !isSameCoupon(coupon, finalExplicitCoupon))
+                .filter(coupon -> isCouponUsable(coupon, subtotal, customerGroupCode))
+                .sorted(Comparator.comparing(Coupon::getPriority, Comparator.nullsLast(Integer::compareTo)).reversed()
+                    .thenComparing(Coupon::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList()) {
+
+                if (!chainStackable) {
+                    break;
+                }
+
+                BigDecimal scopedBase = isShippingScope(autoOffer)
+                    ? shipping.subtract(shippingDiscount)
+                    : subtotal.subtract(orderDiscount);
+                BigDecimal discount = calculateDiscount(autoOffer, subtotal.subtract(orderDiscount), shipping.subtract(shippingDiscount));
+                if (scopedBase.compareTo(BigDecimal.ZERO) <= 0 || discount.compareTo(BigDecimal.ZERO) <= 0) {
+                    continue;
+                }
+
+                if (isShippingScope(autoOffer)) {
+                    shippingDiscount = shippingDiscount.add(discount);
+                } else {
+                    orderDiscount = orderDiscount.add(discount);
+                    response.setAutomaticDiscount(response.getAutomaticDiscount().add(discount));
+                }
+                appliedOffers.add(toAppliedOffer(autoOffer, discount, true));
+                chainStackable = Boolean.TRUE.equals(autoOffer.getStackable());
+            }
+        }
+
+        BigDecimal totalDiscount = orderDiscount.add(shippingDiscount);
+        BigDecimal total = subtotal.add(shipping).subtract(totalDiscount);
         if (total.compareTo(BigDecimal.ZERO) < 0) {
             total = BigDecimal.ZERO;
         }
 
-        response.setDiscount(scale(discount));
+        response.setShippingDiscount(scale(shippingDiscount));
+        response.setDiscount(scale(totalDiscount));
         response.setTotal(scale(total));
+        response.setAppliedOffers(appliedOffers);
+        if (message == null && !appliedOffers.isEmpty()) {
+            message = localizedMessage("coupon.auto_applied", resolvedLanguage);
+        }
         response.setMessage(message);
         return response;
     }
 
-    private boolean isCouponUsable(Coupon coupon, BigDecimal subtotal) {
+    private boolean isCouponUsable(Coupon coupon, BigDecimal subtotal, String customerGroupCode) {
         if (!Boolean.TRUE.equals(coupon.getActive())) {
             return false;
         }
@@ -242,16 +301,34 @@ public class CouponService {
         if (coupon.getUsageLimit() != null && coupon.getUsedCount() != null && coupon.getUsedCount() >= coupon.getUsageLimit()) {
             return false;
         }
-
+        String requiredGroupCode = normalizeCustomerGroupCode(coupon.getCustomerGroupCode());
+        if (requiredGroupCode != null && !requiredGroupCode.equals(customerGroupCode)) {
+            return false;
+        }
         return subtotal.compareTo(notNull(coupon.getMinTotal())) >= 0;
     }
 
-    private BigDecimal calculateDiscount(Coupon coupon, BigDecimal subtotal) {
+    private boolean isSameCoupon(Coupon left, Coupon right) {
+        if (left == null || right == null) {
+            return false;
+        }
+        if (left.getId() != null && right.getId() != null) {
+            return left.getId().equals(right.getId());
+        }
+        return trimToNull(left.getCode()) != null && trimToNull(left.getCode()).equalsIgnoreCase(trimToNull(right.getCode()));
+    }
+
+    private BigDecimal calculateDiscount(Coupon coupon, BigDecimal subtotalBase, BigDecimal shippingBase) {
+        BigDecimal scopedBase = isShippingScope(coupon) ? shippingBase : subtotalBase;
+        if (scopedBase == null || scopedBase.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+
         String type = coupon.getDiscountType() != null ? coupon.getDiscountType().toUpperCase(Locale.ROOT) : "FIXED";
         BigDecimal discount;
 
         if ("PERCENT".equals(type)) {
-            discount = subtotal.multiply(coupon.getValue()).divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
+            discount = scopedBase.multiply(coupon.getValue()).divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
         } else {
             discount = coupon.getValue();
         }
@@ -260,11 +337,25 @@ public class CouponService {
             discount = coupon.getMaxDiscount();
         }
 
-        if (discount.compareTo(subtotal) > 0) {
-            discount = subtotal;
+        if (discount.compareTo(scopedBase) > 0) {
+            discount = scopedBase;
         }
 
         return scale(discount);
+    }
+
+    private AppliedOfferResponse toAppliedOffer(Coupon coupon, BigDecimal discount, boolean automatic) {
+        AppliedOfferResponse response = new AppliedOfferResponse();
+        response.setCode(coupon.getCode());
+        response.setName(coupon.getName());
+        response.setOfferScope(normalizeOfferScope(coupon.getOfferScope()));
+        response.setAutomatic(automatic);
+        response.setDiscount(scale(discount));
+        return response;
+    }
+
+    private boolean isShippingScope(Coupon coupon) {
+        return "SHIPPING".equals(normalizeOfferScope(coupon.getOfferScope()));
     }
 
     private void applyRequest(Coupon coupon, CouponRequest request) {
@@ -280,6 +371,11 @@ public class CouponService {
         coupon.setName(defaultContent.getName());
         syncTranslations(coupon, normalizedTranslations);
         coupon.setDiscountType(request.getDiscountType() != null ? request.getDiscountType().trim().toUpperCase(Locale.ROOT) : null);
+        coupon.setOfferScope(normalizeOfferScope(request.getOfferScope()));
+        coupon.setAutoApply(Boolean.TRUE.equals(request.getAutoApply()));
+        coupon.setStackable(request.getStackable() == null ? Boolean.TRUE : request.getStackable());
+        coupon.setCustomerGroupCode(normalizeCustomerGroupCode(request.getCustomerGroupCode()));
+        coupon.setPriority(request.getPriority() != null ? request.getPriority() : 0);
         coupon.setValue(scale(request.getValue()));
         coupon.setMinTotal(scale(request.getMinTotal()));
         coupon.setMaxDiscount(request.getMaxDiscount() != null ? scale(request.getMaxDiscount()) : null);
@@ -332,6 +428,11 @@ public class CouponService {
         response.setCode(coupon.getCode());
         response.setName(localized != null ? localized.getName() : coupon.getName());
         response.setDiscountType(coupon.getDiscountType());
+        response.setOfferScope(normalizeOfferScope(coupon.getOfferScope()));
+        response.setAutoApply(coupon.getAutoApply());
+        response.setStackable(coupon.getStackable());
+        response.setCustomerGroupCode(normalizeCustomerGroupCode(coupon.getCustomerGroupCode()));
+        response.setPriority(coupon.getPriority());
         response.setValue(coupon.getValue());
         response.setMinTotal(coupon.getMinTotal());
         response.setMaxDiscount(coupon.getMaxDiscount());
@@ -427,31 +528,36 @@ public class CouponService {
             case "en" -> switch (key) {
                 case "coupon.invalid" -> "Invalid coupon";
                 case "coupon.not_applicable" -> "Coupon not applicable";
-                case "coupon.applied" -> "Coupon applied";
+                case "coupon.applied" -> "Offer applied";
+                case "coupon.auto_applied" -> "Automatic offer applied";
                 default -> null;
             };
             case "fr" -> switch (key) {
                 case "coupon.invalid" -> "Coupon invalide";
                 case "coupon.not_applicable" -> "Coupon non applicable";
-                case "coupon.applied" -> "Coupon applique";
+                case "coupon.applied" -> "Offre appliquee";
+                case "coupon.auto_applied" -> "Offre automatique appliquee";
                 default -> null;
             };
             case "de" -> switch (key) {
                 case "coupon.invalid" -> "Ungultiger Gutschein";
                 case "coupon.not_applicable" -> "Gutschein nicht anwendbar";
-                case "coupon.applied" -> "Gutschein angewendet";
+                case "coupon.applied" -> "Angebot angewendet";
+                case "coupon.auto_applied" -> "Automatisches Angebot angewendet";
                 default -> null;
             };
             case "es" -> switch (key) {
                 case "coupon.invalid" -> "Cupon invalido";
                 case "coupon.not_applicable" -> "Cupon no aplicable";
-                case "coupon.applied" -> "Cupon aplicado";
+                case "coupon.applied" -> "Oferta aplicada";
+                case "coupon.auto_applied" -> "Oferta automatica aplicada";
                 default -> null;
             };
             default -> switch (key) {
                 case "coupon.invalid" -> "Coupon non valido";
                 case "coupon.not_applicable" -> "Coupon non applicabile";
-                case "coupon.applied" -> "Coupon applicato";
+                case "coupon.applied" -> "Offerta applicata";
+                case "coupon.auto_applied" -> "Offerta automatica applicata";
                 default -> null;
             };
         };
@@ -462,7 +568,21 @@ public class CouponService {
     }
 
     private BigDecimal scale(BigDecimal value) {
-        return value.setScale(4, RoundingMode.HALF_UP);
+        return value != null ? value.setScale(4, RoundingMode.HALF_UP) : BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
+    }
+
+    private String normalizeOfferScope(String offerScope) {
+        if (offerScope == null || offerScope.isBlank()) {
+            return DEFAULT_SCOPE;
+        }
+        return offerScope.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizeCustomerGroupCode(String customerGroupCode) {
+        if (customerGroupCode == null || customerGroupCode.isBlank()) {
+            return null;
+        }
+        return customerGroupCode.trim().replace(' ', '_').toUpperCase(Locale.ROOT);
     }
 
     private String firstNonBlank(String... values) {
