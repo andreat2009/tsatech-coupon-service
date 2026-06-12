@@ -38,8 +38,8 @@ networkPolicy:
 env:
   SERVER_PORT: "8443"
   SERVER_SSL_ENABLED: "false"
-  KEYCLOAK_ISSUER_URI: '{{ printf "https://keycloak-%s.%s/realms/master" .Values.global.platformNamespace .Values.global.domain }}'
-  KEYCLOAK_JWK_SET_URI: '{{ printf "http://keycloak.%s.svc.cluster.local/realms/master/protocol/openid-connect/certs" .Values.global.platformNamespace }}'
+  KEYCLOAK_ISSUER_URI: '{{ printf "https://keycloak-%s.%s/realms/ecommerce" .Values.global.platformNamespace .Values.global.domain }}'
+  KEYCLOAK_JWK_SET_URI: '{{ printf "http://keycloak.%s.svc.cluster.local/realms/ecommerce/protocol/openid-connect/certs" .Values.global.platformNamespace }}'
   KAFKA_BOOTSTRAP_SERVERS: '{{ printf "keros-kafka.%s.svc.cluster.local:9092" .Values.global.platformNamespace }}'
   KAFKA_SECURITY_PROTOCOL: "PLAINTEXT"
 

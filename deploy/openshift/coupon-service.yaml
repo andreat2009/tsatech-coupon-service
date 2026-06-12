@@ -10,7 +10,7 @@ data:
   KAFKA_SASL_MECHANISM: SCRAM-SHA-512
   KAFKA_SSL_TRUSTSTORE_LOCATION: /etc/kafka/truststore.jks
   KAFKA_SSL_TRUSTSTORE_TYPE: JKS
-  KEYCLOAK_ISSUER_URI: https://keycloak-platform.apps-crc.testing/realms/master
+  KEYCLOAK_ISSUER_URI: https://keycloak-platform.apps-crc.testing/realms/ecommerce
   CART_EVENTS_ENABLED: "true"
   CART_EVENTS_TOPIC: cart.events
   SERVER_PORT: "8443"
