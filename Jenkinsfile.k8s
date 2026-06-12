@@ -32,6 +32,7 @@ spec:
     }
     environment {
         APP_NAME = 'coupon-service'
+        SERVICE_DIR = "${params.SERVICE_DIR ?: 'tsatech-coupon-service'}"
         HELM_RELEASE = "${params.HELM_RELEASE ?: 'coupon-service'}"
         CHART_PATH = "${params.CHART_PATH ?: 'helm'}"
         K8S_NAMESPACE = "${params.K8S_NAMESPACE ?: 'ecommerce'}"
@@ -49,7 +50,7 @@ spec:
         stage('Build Maven') {
             steps {
                 container('maven') {
-                    sh 'mvn clean package -DskipTests'
+                    sh 'mvn -B -pl ${SERVICE_DIR} -am clean package -DskipTests'
                 }
             }
         }
@@ -71,7 +72,7 @@ JSON
                         }
                         sh '''#!/bin/sh
 set -eu
-/kaniko/executor --context "$PWD" --dockerfile Dockerfile.k8s --destination "${IMAGE_REPOSITORY}:${IMAGE_TAG}" --snapshot-mode=redo --use-new-run --digest-file "$WORKSPACE/.image-digest"
+/kaniko/executor --context "$PWD/${SERVICE_DIR}" --dockerfile ${SERVICE_DIR}/Dockerfile.k8s --destination "${IMAGE_REPOSITORY}:${IMAGE_TAG}" --snapshot-mode=redo --use-new-run --digest-file "$WORKSPACE/.image-digest"
 '''
                     }
                 }
@@ -122,7 +123,7 @@ fi
   --set-string image.digest="${IMAGE_DIGEST}" \
   --set-string image.pullPolicy="${IMAGE_PULL_POLICY}" \
   --set-string ingress.host="${APP_NAME}-${K8S_NAMESPACE}.${DOMAIN}" \
-  --set-string env.KEYCLOAK_ISSUER_URI="https://keycloak-${PLATFORM_NAMESPACE}.${DOMAIN}/realms/ecommerce" \
+  --set-string env.KEYCLOAK_ISSUER_URI="https://keycloak.${DOMAIN}/realms/ecommerce" \
   --set-string env.KEYCLOAK_JWK_SET_URI="http://keycloak.${PLATFORM_NAMESPACE}.svc.cluster.local/realms/ecommerce/protocol/openid-connect/certs"
 '''
                 }
